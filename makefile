@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wextra -Wall
-EXEC = build/a
+EXEC = build/jank
 SRCS = $(wildcard src/*.c)
 
 all:
