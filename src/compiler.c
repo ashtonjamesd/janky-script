@@ -25,10 +25,10 @@ static void emitByte(Bytecode *bytecode, OpCode op) {
     bytecode->code[bytecode->code_count++] = op;
 }
 
-static int addConstant(Bytecode *bytecode, int value) {
+static int addConstant(Bytecode *bytecode, Value value) {
     if (bytecode->const_count >= bytecode->const_capacity) {
         bytecode->const_capacity *= 2;
-        bytecode->constants = realloc(bytecode->constants, sizeof(int) * bytecode->const_capacity);
+        bytecode->constants = realloc(bytecode->constants, sizeof(Value) * bytecode->const_capacity);
     }
     bytecode->constants[bytecode->const_count] = value;
 
@@ -66,14 +66,26 @@ static void emitOperator(Bytecode *bytecode, TokenType op) {
 static void compileExpr(Bytecode *bytecode, AstExpression *expr) {
     switch (expr->type) {
         case AST_CONSTANT: {
-            int index = addConstant(bytecode, expr->as.constant.value);
+            Value val;
+            val.type = expr->as.constant.type;
+            if (val.type == TYPE_NUMBER) {
+                val.as.number = expr->as.constant.as.number;
+            } else if (val.type == TYPE_BOOL) {
+                val.as.boolean = expr->as.constant.as.boolean;
+            }
+
+            int index = addConstant(bytecode, val);
             emitByte(bytecode, OP_CONSTANT);
             emitByte(bytecode, index);
             break;
         }
         case AST_UNARY: {
             compileExpr(bytecode, expr->as.unary.right);
-            emitByte(bytecode, OP_NEGATE);
+            if (expr->as.unary.op == MINUS) {
+                emitByte(bytecode, OP_NEGATE);
+            } else if (expr->as.unary.op == NOT) {
+                emitByte(bytecode, OP_NOT);
+            }
             break;
         }
         case AST_BINARY: {
@@ -84,7 +96,7 @@ static void compileExpr(Bytecode *bytecode, AstExpression *expr) {
         }
         default: {
             printf("Unable to compile expression as it is unknown.\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
 }

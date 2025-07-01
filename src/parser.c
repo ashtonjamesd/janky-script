@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "parser.h"
 
@@ -82,7 +83,11 @@ static void printExpr(AstExpression expr, int indent) {
             break;
         }
         case AST_CONSTANT: {
-            printf("CONSTANT: %d\n", expr.as.constant.value);
+            if (expr.as.constant.type == TYPE_NUMBER) {
+                printf("CONSTANT: %d\n", expr.as.constant.as.number);
+            } else if (expr.as.constant.type == TYPE_BOOL) {
+                printf("CONSTANT: %d\n", expr.as.constant.as.boolean);
+            }
             break;
         }
         case AST_UNKNOWN: {
@@ -131,8 +136,17 @@ static AstExpression *parsePrimary(Parser *parser) {
     switch (token.type) {
         case NUMBER: {
             AstExpression *expr = newExpr(AST_CONSTANT);
-            expr->as.constant.value = atoi(token.lexeme);
+            expr->as.constant.type = TYPE_NUMBER;
+            expr->as.constant.as.number = atoi(token.lexeme);
             
+            return expr;
+        }
+        case TRUE:
+        case FALSE: {
+            AstExpression *expr = newExpr(AST_CONSTANT);
+            expr->as.constant.type = TYPE_BOOL;
+            expr->as.constant.as.boolean = strcmp(token.lexeme, "true") == 0;
+
             return expr;
         }
         default: {
@@ -150,7 +164,7 @@ static int match(Parser *parser, TokenType type) {
 }
 
 static AstExpression *parseUnary(Parser *parser) {
-    while (match(parser, MINUS)) {
+    while (match(parser, MINUS) || match(parser, NOT)) {
         TokenType op = parser->tokens[parser->current].type;
         advance(parser);
 

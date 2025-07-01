@@ -12,6 +12,7 @@ typedef enum {
 typedef enum {
     OP_CONSTANT,
     OP_NEGATE,
+    OP_NOT,
     OP_PLUS,
     OP_MINUS,
     OP_MULTIPLY,
@@ -25,7 +26,7 @@ typedef struct {
     int     code_capacity;
     int     code_count;
     
-    int    *constants;
+    Value  *constants;
     int     const_capacity;
     int     const_count;
 } Bytecode;

@@ -28,7 +28,9 @@ typedef enum {
     COMMA,
     SINGLE_EQUALS,
     DOUBLE_EQUALS,
-
+    NOT_EQUALS,
+    NOT,
+    
     IF,
     ELSE,
     WHILE,

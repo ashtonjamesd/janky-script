@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "lexer.h"
+#include "value.h"
 
 typedef enum {
     AST_CONSTANT,
@@ -20,7 +21,11 @@ typedef struct {
 } UnknownExpression;
 
 typedef struct {
-    int value;
+    ValueType type;
+    union {
+        int  number;
+        bool boolean;
+    } as;
 } ConstantExpression;
 
 typedef struct {

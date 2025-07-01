@@ -56,7 +56,9 @@ static Token newToken(Lexer *lexer, TokenType type) {
     return token;
 }
 
-static Token errorToken(char *message) {
+static Token errorToken(Lexer *lexer, char *message) {
+    lexer->hadError = true;
+
     Token token;
     token.lexeme = message;
     token.type = BAD;
@@ -69,8 +71,7 @@ static Token tokenizeString(Lexer *lexer) {
         advance(lexer);
     }
     if (isEnd(lexer)) {
-        lexer->hadError = true;
-        return errorToken("Unterminated string literal.");
+        return errorToken(lexer, "Unterminated string literal.");
     }
 
     advance(lexer);
@@ -78,7 +79,14 @@ static Token tokenizeString(Lexer *lexer) {
 }
 
 static Token tokenizeNumber(Lexer *lexer) {
-    while (!isEnd(lexer) && isDigit(peek(lexer))) {
+    bool hasDecimal = false;
+    while (!isEnd(lexer) && (isDigit(peek(lexer)) || peek(lexer) == '.')) {
+        if (peek(lexer) == '.' && !hasDecimal) {
+            hasDecimal = true;
+        } else if (peek(lexer) == '.') {
+            return errorToken(lexer, "Invalid numeric literal.");
+        }
+
         advance(lexer);
     }
     return newToken(lexer, NUMBER);
@@ -92,6 +100,10 @@ static TokenType getIdentifierType(Lexer *lexer) {
     
     if (strcmp("let", lexeme) == 0) {
         return LET;
+    } else if (strcmp("true", lexeme) == 0) {
+        return TRUE;
+    } else if (strcmp("false", lexeme) == 0) {
+        return FALSE;
     }
 
     free(lexeme);
@@ -126,6 +138,14 @@ static Token nextToken(Lexer *lexer) {
             }
             return newToken(lexer, SINGLE_EQUALS);
         }
+        case '!': {
+            advance(lexer);
+            if (peek(lexer) == '=') {
+                advance(lexer);
+                return newToken(lexer, NOT_EQUALS);
+            }
+            return newToken(lexer, NOT);
+        }
         case ';': {
             advance(lexer);
             return newToken(lexer, SEMICOLON);
@@ -153,7 +173,7 @@ static Token nextToken(Lexer *lexer) {
     }
 
     advance(lexer);
-    return errorToken("Unexpected character.");
+    return errorToken(lexer, "Unexpected character.");
 }
 
 static void skipWhitespace(Lexer *lexer) {
@@ -177,7 +197,7 @@ void addToken(Lexer *lexer, Token token) {
         Token *newTokens = realloc(lexer->tokens, lexer->token_capacity * sizeof(Token));
         if (!newTokens) {
             fprintf(stderr, "Memory allocation failed\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         lexer->tokens = newTokens;
     }
