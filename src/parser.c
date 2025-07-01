@@ -149,6 +149,20 @@ static AstExpression *parsePrimary(Parser *parser) {
 
             return expr;
         }
+        case STRING: {
+            AstExpression *expr = newExpr(AST_CONSTANT);
+            expr->as.constant.type = TYPE_STRING;
+
+            Object *obj = malloc(sizeof(Object));
+            obj->type = OBJ_STRING;
+
+            expr->as.constant.as.object = obj;
+
+            expr->as.constant.as.object->as.string.chars = strdup(token.lexeme);
+            expr->as.constant.as.object->as.string.length = strlen(token.lexeme);
+
+            return expr;
+        }
         default: {
             AstExpression *expr = newExpr(AST_UNKNOWN);
             expr->as.unknown.dummy = 0;
@@ -164,7 +178,7 @@ static int match(Parser *parser, TokenType type) {
 }
 
 static AstExpression *parseUnary(Parser *parser) {
-    while (match(parser, MINUS) || match(parser, NOT)) {
+    while (match(parser, MINUS) || match(parser, LOGICAL_NOT) || match(parser, BITWISE_NOT)) {
         TokenType op = parser->tokens[parser->current].type;
         advance(parser);
 
@@ -220,8 +234,151 @@ static AstExpression *parseTerm(Parser *parser) {
     return left;
 }
 
+static AstExpression *parseShifts(Parser *parser) {
+    AstExpression *left = parseTerm(parser);
+
+    while (match(parser, BITWISE_RIGHT_SHIFT) || match(parser, BITWISE_LEFT_SHIFT)) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parseTerm(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
+static AstExpression *parseComparison(Parser *parser) {
+    AstExpression *left = parseShifts(parser);
+
+    while (match(parser, DOUBLE_EQUALS) || match(parser, TRIPLE_EQUALS) || match(parser, TRIPLE_NOT_EQUALS) 
+        || match(parser, NOT_EQUALS) || match(parser, GREATER_THAN) || match(parser, LESS_THAN) 
+        || match(parser, GREATER_THAN_EQUALS) || match(parser, LESS_THAN_EQUALS)
+    ) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parseShifts(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
+static AstExpression *parseBitwiseAnd(Parser *parser) {
+    AstExpression *left = parseComparison(parser);
+
+    while (match(parser, BITWISE_AND)) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parseComparison(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
+static AstExpression *parsBitwiseXor(Parser *parser) {
+    AstExpression *left = parseBitwiseAnd(parser);
+
+    while (match(parser, BITWISE_XOR)) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parseBitwiseAnd(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
+static AstExpression *parseBitwiseOr(Parser *parser) {
+    AstExpression *left = parsBitwiseXor(parser);
+
+    while (match(parser, BITWISE_OR)) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parsBitwiseXor(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
+static AstExpression *parseAnd(Parser *parser) {
+    AstExpression *left = parseBitwiseOr(parser);
+
+    while (match(parser, LOGICAL_AND)) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parseBitwiseOr(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
+static AstExpression *parseOr(Parser *parser) {
+    AstExpression *left = parseAnd(parser);
+
+    while (match(parser, LOGICAL_OR)) {
+        TokenType op = parser->tokens[parser->current].type;
+        advance(parser);
+
+        AstExpression *right = parseAnd(parser);
+
+        AstExpression *expr = newExpr(AST_BINARY);
+        expr->as.binary.left = left;
+        expr->as.binary.op = op;
+        expr->as.binary.right = right;
+
+        left = expr;
+    }
+
+    return left;
+}
+
 static AstExpression *parseExpression(Parser *parser) {
-    return parseTerm(parser);
+    return parseOr(parser);
 }
 
 void parse(Parser *parser) {

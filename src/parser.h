@@ -23,8 +23,9 @@ typedef struct {
 typedef struct {
     ValueType type;
     union {
-        int  number;
-        bool boolean;
+        int     number;
+        bool    boolean;
+        Object *object;
     } as;
 } ConstantExpression;
 

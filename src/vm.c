@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "vm.h"
 #include "compiler.h"
@@ -32,6 +33,49 @@ Value pop(JankyVm *vm) {
     // }
     vm->stack_top--;
     return *vm->stack_top;
+}
+
+static bool valuesEqual(Value a, Value b) {
+    if (a.type != b.type) return false;
+
+    switch (a.type) {
+        case TYPE_NUMBER:
+            return a.as.number == b.as.number;
+        case TYPE_BOOL:
+            return a.as.boolean == b.as.boolean;
+        case TYPE_STRING:
+            return strcmp(a.as.object->as.string.chars, b.as.object->as.string.chars) == 0;
+        default:
+            fprintf(stderr, "Unknown type in valuesEqual, exiting.\n");
+            exit(EXIT_FAILURE);
+    }
+}
+
+static bool looselyEqual(Value a, Value b) {
+    if (a.type == b.type) {
+        return valuesEqual(a, b);
+    }
+
+    if (a.type == TYPE_BOOL && b.type == TYPE_NUMBER) {
+        return (a.as.boolean ? 1 : 0) == b.as.number;
+    }
+    if (a.type == TYPE_NUMBER && b.type == TYPE_BOOL) {
+        return a.as.number == (b.as.boolean ? 1 : 0);
+    }
+    if (a.type == TYPE_STRING && b.type == TYPE_NUMBER) {
+        return atoi(a.as.object->as.string.chars) == b.as.number;
+    }
+    if (a.type == TYPE_NUMBER && b.type == TYPE_STRING) {
+        return atoi(b.as.object->as.string.chars) == a.as.number;
+    }
+    if (a.type == TYPE_BOOL && b.type == TYPE_STRING) {
+        return atoi(b.as.object->as.string.chars) == a.as.boolean;
+    }
+    if (a.type == TYPE_STRING && b.type == TYPE_BOOL) {
+        return atoi(a.as.object->as.string.chars) == b.as.boolean;
+    }
+
+    return false;
 }
 
 static VmResult runtimeError(char *error) {
@@ -125,7 +169,7 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
 
             break;
         }
-        case OP_NOT: {
+        case OP_LOGICAL_NOT: {
             Value a = pop(vm);
             if (a.type != TYPE_BOOL) {
                 return runtimeError("Can only apply logical not to boolean values.");
@@ -134,6 +178,212 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value boolean = newBoolean(!a.as.boolean);
             push(vm, boolean);
 
+            break;
+        }
+        case OP_LOGICAL_AND: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != TYPE_BOOL || b.type != TYPE_BOOL) {
+                return runtimeError("Can only apply logical and to boolean values.");
+            }
+
+            Value boolean = newBoolean(a.as.boolean && b.as.boolean);
+            push(vm, boolean);
+            
+            break;
+        }
+        case OP_LOGICAL_OR: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != TYPE_BOOL || b.type != TYPE_BOOL) {
+                return runtimeError("Can only apply logical or to boolean values.");
+            }
+
+            Value boolean = newBoolean(a.as.boolean || b.as.boolean);
+            push(vm, boolean);
+            
+            break;
+        }
+        case OP_BITWISE_AND: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != TYPE_NUMBER || b.type != TYPE_NUMBER) {
+                return runtimeError("Can only apply bitwise and to number values.");
+            }
+
+            Value number = newNumber((int)a.as.number & (int)b.as.number);
+            push(vm, number);
+            
+            break;
+        }
+        case OP_BITWISE_NOT: {
+            Value a = pop(vm);
+            
+            if (a.type != TYPE_NUMBER) {
+                return runtimeError("Can only apply bitwise not to number values.");
+            }
+
+            Value number = newNumber(~(int)a.as.number );
+            push(vm, number);
+            
+            break;
+        }
+        case OP_BITWISE_XOR: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != TYPE_NUMBER || b.type != TYPE_NUMBER) {
+                return runtimeError("Can only apply bitwise xor to number values.");
+            }
+
+            Value number = newNumber((int)a.as.number ^ (int)b.as.number);
+            push(vm, number);
+            
+            break;
+        }
+        case OP_BITWISE_LEFT_SHIFT: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != TYPE_NUMBER || b.type != TYPE_NUMBER) {
+                return runtimeError("Can only apply bitwise xor to number values.");
+            }
+
+            Value number = newNumber((int)a.as.number << (int)b.as.number);
+            push(vm, number);
+            
+            break;
+        }
+        case OP_BITWISE_RIGHT_SHIFT: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != TYPE_NUMBER || b.type != TYPE_NUMBER) {
+                return runtimeError("Can only apply bitwise xor to number values.");
+            }
+
+            Value number = newNumber((int)a.as.number >> (int)b.as.number);
+            push(vm, number);
+            
+            break;
+        }
+        case OP_EQUALS: {
+            Value b = pop(vm);
+            Value a = pop(vm);
+
+            push(vm, newBoolean(looselyEqual(a, b)));
+            break;
+        }
+        case OP_NOT_EQUALS: {
+            Value b = pop(vm);
+            Value a = pop(vm);
+
+            push(vm, newBoolean(!looselyEqual(a, b)));
+            break;
+        }
+        case OP_TRIPLE_EQUALS: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != b.type) {
+                push(vm, newBoolean(false));
+                break;
+            }
+
+            Value result;
+            if (a.type == TYPE_NUMBER) {
+                result = newBoolean(a.as.number == b.as.number);
+            } else if (a.type == TYPE_BOOL) {
+                result = newBoolean(a.as.boolean == b.as.boolean);
+            } else if (a.type == TYPE_STRING) {
+                result = newBoolean(strcmp(a.as.object->as.string.chars, b.as.object->as.string.chars) == 0);
+            } else {
+                fprintf(stderr, "Unknown type in vm, exiting.\n");
+                exit(EXIT_FAILURE);
+            }
+
+            push(vm, result);
+            
+            break;
+        }
+        case OP_TRIPLE_NOT_EQUALS: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != b.type) {
+                push(vm, newBoolean(false));
+                break;
+            }
+
+            Value result;
+            if (a.type == TYPE_NUMBER) {
+                result = newBoolean(a.as.number == b.as.number);
+            } else if (a.type == TYPE_BOOL) {
+                result = newBoolean(a.as.boolean == b.as.boolean);
+            } else if (a.type == TYPE_STRING) {
+                result = newBoolean(strcmp(a.as.object->as.string.chars, b.as.object->as.string.chars) == 0);
+            } else {
+                fprintf(stderr, "Unknown type in vm, exiting.\n");
+                exit(EXIT_FAILURE);
+            }
+
+            push(vm, result);
+            
+            break;
+        }
+        case OP_LESS_THAN: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != b.type) {
+                return runtimeError("Can only apply less than to number values.");
+            }
+
+            Value result = newBoolean(a.as.number < b.as.number);
+            push(vm, result);
+            
+            break;
+        }
+        case OP_LESS_THAN_EQUALS: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != b.type) {
+                return runtimeError("Can only apply less than equals to number values.");
+            }
+
+            Value result = newBoolean(a.as.number <= b.as.number);
+            push(vm, result);
+            
+            break;
+        }
+        case OP_GREATER_THAN: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != b.type) {
+                return runtimeError("Can only apply greater than to number values.");
+            }
+
+            Value result = newBoolean(a.as.number > b.as.number);
+            push(vm, result);
+            
+            break;
+        }
+        case OP_GREATER_THAN_EQUALS: {
+            Value a = pop(vm);
+            Value b = pop(vm);
+            
+            if (a.type != b.type) {
+                return runtimeError("Can only apply greater than to number values.");
+            }
+
+            Value result = newBoolean(a.as.number >= b.as.number);
+            push(vm, result);
+            
             break;
         }
         case OP_END: {
@@ -145,14 +395,20 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
 
             if (result.type == TYPE_BOOL) {
                 printf("%s\n", result.as.boolean ? "true" : "false");
-            } else {
+            } else if (result.type == TYPE_NUMBER) {
                 printf("%f\n", result.as.number);
+            } else if (result.type == TYPE_STRING) {
+                printf("%s\n", result.as.object->as.string.chars);
+            }
+            else {
+                fprintf(stderr, "Unknown end result type in vm.\n");
+                exit(EXIT_FAILURE);
             }
 
             break;
         }
         default: {
-            fprintf(stderr, "Halting execution: unknown opcode '%d'\n", op);
+            fprintf(stderr, "Halting VM execution: unknown opcode '%d'\n", op);
             exit(EXIT_FAILURE);
         }
     }

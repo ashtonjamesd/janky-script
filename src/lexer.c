@@ -56,7 +56,7 @@ static Token newToken(Lexer *lexer, TokenType type) {
     return token;
 }
 
-static Token errorToken(Lexer *lexer, char *message) {
+static Token compileErrorToken(Lexer *lexer, char *message) {
     lexer->hadError = true;
 
     Token token;
@@ -67,15 +67,25 @@ static Token errorToken(Lexer *lexer, char *message) {
 
 static Token tokenizeString(Lexer *lexer) {
     advance(lexer);
+
+    lexer->start = lexer->current;
     while (!isEnd(lexer) && peek(lexer) != '\"') {
         advance(lexer);
     }
     if (isEnd(lexer)) {
-        return errorToken(lexer, "Unterminated string literal.");
+        return compileErrorToken(lexer, "Unterminated string literal.");
     }
 
+    size_t length = lexer->current - lexer->start;
+    Token token;
+    token.lexeme = malloc(length + 1);
+    memcpy(token.lexeme, lexer->start, length);
+    token.lexeme[length] = '\0';
+    token.type = STRING;
+
     advance(lexer);
-    return newToken(lexer, STRING);
+
+    return token;
 }
 
 static Token tokenizeNumber(Lexer *lexer) {
@@ -84,7 +94,7 @@ static Token tokenizeNumber(Lexer *lexer) {
         if (peek(lexer) == '.' && !hasDecimal) {
             hasDecimal = true;
         } else if (peek(lexer) == '.') {
-            return errorToken(lexer, "Invalid numeric literal.");
+            return compileErrorToken(lexer, "Invalid numeric literal.");
         }
 
         advance(lexer);
@@ -134,6 +144,12 @@ static Token nextToken(Lexer *lexer) {
             advance(lexer);
             if (peek(lexer) == '=') {
                 advance(lexer);
+                
+                if (peek(lexer) == '=') {
+                    advance(lexer);
+                    return newToken(lexer, TRIPLE_EQUALS);
+                }
+                
                 return newToken(lexer, DOUBLE_EQUALS);
             }
             return newToken(lexer, SINGLE_EQUALS);
@@ -142,9 +158,67 @@ static Token nextToken(Lexer *lexer) {
             advance(lexer);
             if (peek(lexer) == '=') {
                 advance(lexer);
+                                
+                if (peek(lexer) == '=') {
+                    advance(lexer);
+                    return newToken(lexer, TRIPLE_NOT_EQUALS);
+                }
+
                 return newToken(lexer, NOT_EQUALS);
             }
-            return newToken(lexer, NOT);
+            return newToken(lexer, LOGICAL_NOT);
+        }
+        case '&': {
+            advance(lexer);
+            if (peek(lexer) == '&') {
+                advance(lexer);
+                return newToken(lexer, LOGICAL_AND);
+            }
+            return newToken(lexer, BITWISE_AND);
+        }
+        case '|': {
+            advance(lexer);
+            if (peek(lexer) == '|') {
+                advance(lexer);
+                return newToken(lexer, LOGICAL_OR);
+            }
+            return newToken(lexer, BITWISE_OR);
+        }
+        case '>': {
+            advance(lexer);
+
+            if (peek(lexer) == '=') {
+                advance(lexer);
+                return newToken(lexer, GREATER_THAN_EQUALS);
+            }
+            if (peek(lexer) == '>') {
+                advance(lexer);
+                return newToken(lexer, BITWISE_RIGHT_SHIFT);
+            }
+
+            return newToken(lexer, GREATER_THAN);
+        }
+        case '<': {
+            advance(lexer);
+
+            if (peek(lexer) == '=') {
+                advance(lexer);
+                return newToken(lexer, LESS_THAN_EQUALS);
+            }
+            if (peek(lexer) == '<') {
+                advance(lexer);
+                return newToken(lexer, BITWISE_LEFT_SHIFT);
+            }
+
+            return newToken(lexer, LESS_THAN);
+        }
+        case '~': {
+            advance(lexer);
+            return newToken(lexer, BITWISE_NOT);
+        }
+        case '^': {
+            advance(lexer);
+            return newToken(lexer, BITWISE_XOR);
         }
         case ';': {
             advance(lexer);
@@ -173,7 +247,7 @@ static Token nextToken(Lexer *lexer) {
     }
 
     advance(lexer);
-    return errorToken(lexer, "Unexpected character.");
+    return compileErrorToken(lexer, "Unexpected character.");
 }
 
 static void skipWhitespace(Lexer *lexer) {

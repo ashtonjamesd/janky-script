@@ -57,8 +57,73 @@ static void emitOperator(Bytecode *bytecode, TokenType op) {
             emitByte(bytecode, OP_MODULO);
             break;
         }
-        default: {
+        case LOGICAL_AND: {
+            emitByte(bytecode, OP_LOGICAL_AND);
             break;
+        }
+        case LOGICAL_OR: {
+            emitByte(bytecode, OP_LOGICAL_OR);
+            break;
+        }
+        case BITWISE_AND: {
+            emitByte(bytecode, OP_BITWISE_AND);
+            break;
+        }
+        case BITWISE_OR: {
+            emitByte(bytecode, OP_BITWISE_OR);
+            break;
+        }
+        case BITWISE_XOR: {
+            emitByte(bytecode, OP_BITWISE_XOR);
+            break;
+        }
+        case BITWISE_NOT: {
+            emitByte(bytecode, OP_BITWISE_NOT);
+            break;
+        }
+        case DOUBLE_EQUALS: {
+            emitByte(bytecode, OP_EQUALS);
+            break;
+        }
+        case NOT_EQUALS: {
+            emitByte(bytecode, OP_NOT_EQUALS);
+            break;
+        }
+        case GREATER_THAN: {
+            emitByte(bytecode, OP_GREATER_THAN);
+            break;
+        }
+        case LESS_THAN: {
+            emitByte(bytecode, OP_LESS_THAN);
+            break;
+        }
+        case GREATER_THAN_EQUALS: {
+            emitByte(bytecode, OP_GREATER_THAN_EQUALS);
+            break;
+        }
+        case LESS_THAN_EQUALS: {
+            emitByte(bytecode, OP_LESS_THAN_EQUALS);
+            break;
+        }
+        case BITWISE_LEFT_SHIFT: {
+            emitByte(bytecode, OP_BITWISE_LEFT_SHIFT);
+            break;
+        }
+        case BITWISE_RIGHT_SHIFT: {
+            emitByte(bytecode, OP_BITWISE_RIGHT_SHIFT);
+            break;
+        }
+        case TRIPLE_EQUALS: {
+            emitByte(bytecode, OP_TRIPLE_EQUALS);
+            break;
+        }
+        case TRIPLE_NOT_EQUALS: {
+            emitByte(bytecode, OP_TRIPLE_NOT_EQUALS);
+            break;
+        }
+        default: {
+            fprintf(stderr, "Unknown operator in compiler, stopping.\n");
+            exit(EXIT_FAILURE);
         }
     }
 }
@@ -72,6 +137,11 @@ static void compileExpr(Bytecode *bytecode, AstExpression *expr) {
                 val.as.number = expr->as.constant.as.number;
             } else if (val.type == TYPE_BOOL) {
                 val.as.boolean = expr->as.constant.as.boolean;
+            } else if (val.type == TYPE_STRING) {
+                val.as.object = expr->as.constant.as.object;
+            } else {
+                fprintf(stderr, "Unknown constant type in compiler.\n");
+                exit(EXIT_FAILURE);
             }
 
             int index = addConstant(bytecode, val);
@@ -83,8 +153,13 @@ static void compileExpr(Bytecode *bytecode, AstExpression *expr) {
             compileExpr(bytecode, expr->as.unary.right);
             if (expr->as.unary.op == MINUS) {
                 emitByte(bytecode, OP_NEGATE);
-            } else if (expr->as.unary.op == NOT) {
-                emitByte(bytecode, OP_NOT);
+            } else if (expr->as.unary.op == LOGICAL_NOT) {
+                emitByte(bytecode, OP_LOGICAL_NOT);
+            } else if (expr->as.unary.op == BITWISE_NOT) {
+                emitByte(bytecode, OP_BITWISE_NOT);
+            } else {
+                fprintf(stderr, "Unknown unary op");
+                exit(EXIT_FAILURE);
             }
             break;
         }
