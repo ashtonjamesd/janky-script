@@ -114,6 +114,12 @@ static TokenType getIdentifierType(Lexer *lexer) {
         return TRUE;
     } else if (strcmp("false", lexeme) == 0) {
         return FALSE;
+    } else if (strcmp("typeof", lexeme) == 0) {
+        return TYPEOF;
+    } else if (strcmp("var", lexeme) == 0) {
+        return VAR;
+    } else if (strcmp("const", lexeme) == 0) {
+        return CONST;
     }
 
     free(lexeme);

@@ -53,6 +53,7 @@ typedef enum {
     VAR,
     LET,
     CONST,
+    TYPEOF,
 
     TOKEN_EOF,
     BAD

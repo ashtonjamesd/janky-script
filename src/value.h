@@ -24,14 +24,17 @@ typedef enum {
     TYPE_BOOL,
     TYPE_NUMBER,
     TYPE_STRING,
+    TYPE_IDENTIFIER,
 } ValueType;
 
 typedef struct {
     ValueType type;
+    
     union {
         bool    boolean;
         double  number;
         Object *object;
+        char   *identifier;
     } as;
 } Value;
 

@@ -139,6 +139,8 @@ static void compileExpr(Bytecode *bytecode, AstExpression *expr) {
                 val.as.boolean = expr->as.constant.as.boolean;
             } else if (val.type == TYPE_STRING) {
                 val.as.object = expr->as.constant.as.object;
+            } else if (val.type == TYPE_IDENTIFIER) {
+                val.as.identifier = expr->as.constant.as.identifier;
             } else {
                 fprintf(stderr, "Unknown constant type in compiler.\n");
                 exit(EXIT_FAILURE);
@@ -157,10 +159,16 @@ static void compileExpr(Bytecode *bytecode, AstExpression *expr) {
                 emitByte(bytecode, OP_LOGICAL_NOT);
             } else if (expr->as.unary.op == BITWISE_NOT) {
                 emitByte(bytecode, OP_BITWISE_NOT);
+            } else if (expr->as.unary.op == TYPEOF) {
+                emitByte(bytecode, OP_TYPEOF);
             } else {
-                fprintf(stderr, "Unknown unary op");
+                fprintf(stderr, "Unknown unary op.\n");
                 exit(EXIT_FAILURE);
             }
+            break;
+        }
+        case AST_VARIABLE_DECLARATION: {
+            
             break;
         }
         case AST_BINARY: {

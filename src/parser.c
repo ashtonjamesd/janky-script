@@ -28,6 +28,19 @@ void freeExpr(AstExpression *expr) {
             freeExpr(expr->as.binary.left);
             freeExpr(expr->as.binary.right);
             break;
+        case AST_CONSTANT:
+            if (expr->as.constant.type == TYPE_IDENTIFIER) {
+                free(expr->as.constant.as.identifier);
+            }
+            break;
+        case AST_VARIABLE_DECLARATION:
+            free(expr->as.variable.identifier);
+
+            if (expr->as.variable.initializer) {
+                free(expr->as.variable.initializer);
+            }
+            break;
+        
         default:
             break;
     }
@@ -46,17 +59,39 @@ void freeParser(Parser *parser) {
     free(parser->ast);
 }
 
-
-static Token peek(Parser *parser) {
-    return parser->tokens[parser->current];
-}
-
-static void advance(Parser *parser) {
+static inline void advance(Parser *parser) {
     parser->current++;
 }
 
-static int isEnd(Parser *parser) {
+static inline Token peek(Parser *parser) {
+    return parser->tokens[parser->current];
+}
+
+static inline int isEnd(Parser *parser) {
     return peek(parser).type == TOKEN_EOF;
+}
+
+static int match(Parser *parser, TokenType type) {
+    return isEnd(parser) ? 0 : parser->tokens[parser->current].type == type;
+}
+
+static inline bool expect(Parser *parser, TokenType type) {
+    if (match(parser, type)) {
+        advance(parser);
+        return true;
+    }
+
+    return false;
+}
+
+static Token currentToken(Parser *parser) {
+    if (isEnd(parser)) {
+        Token token;
+        token.type = TOKEN_EOF;
+        return token;
+    }
+
+    return parser->tokens[parser->current];
 }
 
 static void printExpr(AstExpression expr, int indent) {
@@ -95,7 +130,7 @@ static void printExpr(AstExpression expr, int indent) {
             break;
         }
         default: {
-            printf("OOPS bad expression..");
+            printf("OOPS bad expression.");
         }
     }
 }
@@ -114,19 +149,20 @@ static AstExpression *newExpr(AstType type) {
     return expr;
 }
 
-static Token currentToken(Parser *parser) {
-    if (isEnd(parser)) {
-        Token token;
-        token.type = TOKEN_EOF;
-        return token;
-    }
-
-    return parser->tokens[parser->current];
+AstExpression *newBinaryExpr(TokenType op, AstExpression *left, AstExpression *right) {
+    AstExpression *expr = newExpr(AST_BINARY);
+    expr->as.binary.left = left;
+    expr->as.binary.op = op;
+    expr->as.binary.right = right;
+    
+    return expr;
 }
 
-static void parserError(Parser *parser, char *message) {
+static AstExpression *compileError(Parser *parser, char *message) {
     parser->hadError = 1;
     printf("Error: %s\n", message);
+
+    return NULL;
 }
 
 static AstExpression *parsePrimary(Parser *parser) {
@@ -163,23 +199,23 @@ static AstExpression *parsePrimary(Parser *parser) {
 
             return expr;
         }
-        default: {
-            AstExpression *expr = newExpr(AST_UNKNOWN);
-            expr->as.unknown.dummy = 0;
-
-            parserError(parser, "Expected expression");
+        case IDENTIFIER: {
+            AstExpression *expr = newExpr(AST_CONSTANT);
+            expr->as.constant.type = TYPE_IDENTIFIER;
+            expr->as.constant.as.identifier = strdup(token.lexeme);
+            
             return expr;
+        }
+        default: {
+            compileError(parser, "Expected expression");
+            return NULL;
         }
     }
 }
 
-static int match(Parser *parser, TokenType type) {
-    return isEnd(parser) ? 0 : parser->tokens[parser->current].type == type;
-}
-
 static AstExpression *parseUnary(Parser *parser) {
-    while (match(parser, MINUS) || match(parser, LOGICAL_NOT) || match(parser, BITWISE_NOT)) {
-        TokenType op = parser->tokens[parser->current].type;
+    while (match(parser, MINUS) || match(parser, LOGICAL_NOT) || match(parser, BITWISE_NOT) || match(parser, TYPEOF)) {
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseUnary(parser);
@@ -198,17 +234,11 @@ static AstExpression *parseFactor(Parser *parser) {
     AstExpression *left = parseUnary(parser);
 
     while (match(parser, STAR) || match(parser, SLASH) || match(parser, MODULO)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseUnary(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -218,17 +248,11 @@ static AstExpression *parseTerm(Parser *parser) {
     AstExpression *left = parseFactor(parser);
 
     while (match(parser, PLUS) || match(parser, MINUS)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseFactor(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -238,17 +262,11 @@ static AstExpression *parseShifts(Parser *parser) {
     AstExpression *left = parseTerm(parser);
 
     while (match(parser, BITWISE_RIGHT_SHIFT) || match(parser, BITWISE_LEFT_SHIFT)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseTerm(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -261,17 +279,11 @@ static AstExpression *parseComparison(Parser *parser) {
         || match(parser, NOT_EQUALS) || match(parser, GREATER_THAN) || match(parser, LESS_THAN) 
         || match(parser, GREATER_THAN_EQUALS) || match(parser, LESS_THAN_EQUALS)
     ) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseShifts(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -281,57 +293,39 @@ static AstExpression *parseBitwiseAnd(Parser *parser) {
     AstExpression *left = parseComparison(parser);
 
     while (match(parser, BITWISE_AND)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseComparison(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
 }
 
-static AstExpression *parsBitwiseXor(Parser *parser) {
+static AstExpression *parseBitwiseXor(Parser *parser) {
     AstExpression *left = parseBitwiseAnd(parser);
 
     while (match(parser, BITWISE_XOR)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseBitwiseAnd(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
 }
 
 static AstExpression *parseBitwiseOr(Parser *parser) {
-    AstExpression *left = parsBitwiseXor(parser);
+    AstExpression *left = parseBitwiseXor(parser);
 
     while (match(parser, BITWISE_OR)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
-        AstExpression *right = parsBitwiseXor(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        AstExpression *right = parseBitwiseXor(parser);
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -341,17 +335,11 @@ static AstExpression *parseAnd(Parser *parser) {
     AstExpression *left = parseBitwiseOr(parser);
 
     while (match(parser, LOGICAL_AND)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseBitwiseOr(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -361,17 +349,11 @@ static AstExpression *parseOr(Parser *parser) {
     AstExpression *left = parseAnd(parser);
 
     while (match(parser, LOGICAL_OR)) {
-        TokenType op = parser->tokens[parser->current].type;
+        TokenType op = currentToken(parser).type;
         advance(parser);
 
         AstExpression *right = parseAnd(parser);
-
-        AstExpression *expr = newExpr(AST_BINARY);
-        expr->as.binary.left = left;
-        expr->as.binary.op = op;
-        expr->as.binary.right = right;
-
-        left = expr;
+        left = newBinaryExpr(op, left, right);
     }
 
     return left;
@@ -381,10 +363,81 @@ static AstExpression *parseExpression(Parser *parser) {
     return parseOr(parser);
 }
 
+static inline VariableBinding mapVariableBinding(TokenType type) {
+    switch(type) {
+        case LET: return VARIABLE_LET;
+        case VAR: return VARIABLE_VAR;
+        case CONST: return VARIABLE_CONST;
+        default: return VARIABLE_UNKNOWN;
+    }
+}
+
+static bool expectSemicolon(Parser *parser) {
+    if (!expect(parser, SEMICOLON)) {
+        compileError(parser, "Expected ';'");
+        return false;
+    }
+
+    return true;
+}
+
+static inline AstExpression *noExpr() {
+    return NULL;
+}
+
+static bool expectIdentifier(Parser *parser) {
+    if (!expect(parser, IDENTIFIER)) {
+        compileError(parser, "Expected identifier");
+        return false;
+    }
+
+    return true;
+}
+
+static AstExpression *parseVariableDeclaration(Parser *parser) {
+    Token declType = currentToken(parser);
+    advance(parser);
+
+    Token identifier = currentToken(parser);
+    if (!expectIdentifier(parser)) return noExpr();
+
+    AstExpression *initializer = NULL;
+    
+    if (match(parser, SEMICOLON)) {
+        advance(parser);
+        goto makeStmt;
+    }
+
+    if (!expect(parser, SINGLE_EQUALS)) {
+        return compileError(parser, "Expected '=' or ';");
+    }
+
+    initializer = parseExpression(parser);
+    if (!initializer) return NULL;
+
+    if (!expectSemicolon(parser)) return noExpr();
+
+    makeStmt:
+    AstExpression *stmt = newExpr(AST_VARIABLE_DECLARATION);
+    
+    stmt->as.variable.binding = mapVariableBinding(declType.type);
+    stmt->as.variable.identifier = strdup(identifier.lexeme);
+    stmt->as.variable.initializer = initializer;
+
+    return stmt;
+}
+
+static AstExpression *parseStatement(Parser *parser) {
+    if (match(parser, LET) || match(parser, CONST) || match(parser, VAR)) {
+        return parseVariableDeclaration(parser);
+    }
+
+    return parseExpression(parser);
+}
+
 void parse(Parser *parser) {
     while (!isEnd(parser)) {
-        AstExpression* expr = parseExpression(parser);
-
+        AstExpression* expr = parseStatement(parser);
 
         if (parser->ast->expr_count >= parser->ast->expr_capacity) {
             parser->ast->expr_capacity *= 2;

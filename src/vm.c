@@ -99,6 +99,26 @@ static Value newBoolean(bool value) {
     return boolean;
 }
 
+static Value newString(char *value) {
+    Value string;
+    string.type = TYPE_STRING;
+    
+    string.as.object = malloc(sizeof(Object));
+
+    string.as.object->as.string.chars = strdup(value);
+    string.as.object->as.string.length = strlen(value);
+    string.as.object->type = OBJ_STRING;
+
+    return string;
+}
+
+static int tryGetIntValue(Value val) {
+    if (val.type == TYPE_BOOL) return val.as.boolean;
+    else if (val.type == TYPE_NUMBER) return val.as.number;
+
+    return 0;
+}
+
 static VmResult evalOpCode(JankyVm *vm, OpCode op) {
     switch (op) {
         case OP_CONSTANT: {
@@ -114,7 +134,10 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value a = pop(vm);
             Value b = pop(vm);
 
-            Value number = newNumber(a.as.number + b.as.number);
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
+
+            Value number = newNumber(aVal + bVal);
             push(vm, number);
 
             break;
@@ -123,7 +146,10 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value a = pop(vm);
             Value b = pop(vm);
 
-            Value number = newNumber(a.as.number - b.as.number);
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
+
+            Value number = newNumber(aVal - bVal);
             push(vm, number);
 
             break;
@@ -132,7 +158,10 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value a = pop(vm);
             Value b = pop(vm);
 
-            Value number = newNumber(a.as.number * b.as.number);
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
+
+            Value number = newNumber(aVal * bVal);
             push(vm, number);
 
             break;
@@ -141,7 +170,10 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value a = pop(vm);
             Value b = pop(vm);
 
-            Value number = newNumber(a.as.number / b.as.number);
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
+
+            Value number = newNumber(aVal / bVal);
             push(vm, number);
 
             break;
@@ -150,7 +182,10 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value a = pop(vm);
             Value b = pop(vm);
 
-            int result = (int)a.as.number % (int)b.as.number;
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
+
+            int result = aVal % bVal;
 
             Value number = newNumber(result);
             push(vm, number);
@@ -160,22 +195,19 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
         case OP_NEGATE: {
             Value a = pop(vm);
 
-            if (a.type != TYPE_NUMBER) {
-                return runtimeError("Can only negate numeric values.");
-            }
+            int aVal = tryGetIntValue(a);
 
-            Value number = newNumber(-a.as.number);
+            Value number = newNumber(-aVal);
             push(vm, number);
 
             break;
         }
         case OP_LOGICAL_NOT: {
             Value a = pop(vm);
-            if (a.type != TYPE_BOOL) {
-                return runtimeError("Can only apply logical not to boolean values.");
-            }
 
-            Value boolean = newBoolean(!a.as.boolean);
+            int aVal = tryGetIntValue(a);
+
+            Value boolean = newBoolean(!aVal);
             push(vm, boolean);
 
             break;
@@ -183,12 +215,11 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
         case OP_LOGICAL_AND: {
             Value a = pop(vm);
             Value b = pop(vm);
-            
-            if (a.type != TYPE_BOOL || b.type != TYPE_BOOL) {
-                return runtimeError("Can only apply logical and to boolean values.");
-            }
 
-            Value boolean = newBoolean(a.as.boolean && b.as.boolean);
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
+
+            Value boolean = newBoolean(aVal && bVal);
             push(vm, boolean);
             
             break;
@@ -197,11 +228,10 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             Value a = pop(vm);
             Value b = pop(vm);
             
-            if (a.type != TYPE_BOOL || b.type != TYPE_BOOL) {
-                return runtimeError("Can only apply logical or to boolean values.");
-            }
+            int aVal = tryGetIntValue(a);
+            int bVal = tryGetIntValue(b);
 
-            Value boolean = newBoolean(a.as.boolean || b.as.boolean);
+            Value boolean = newBoolean(aVal || bVal);
             push(vm, boolean);
             
             break;
@@ -403,6 +433,26 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
             else {
                 fprintf(stderr, "Unknown end result type in vm.\n");
                 exit(EXIT_FAILURE);
+            }
+
+            break;
+        }
+        case OP_TYPEOF: {
+            Value a = pop(vm);
+
+            
+            if (a.type == TYPE_BOOL) {
+                Value val = newString("\"boolean\"");
+                push(vm, val);
+            } else if (a.type == TYPE_NUMBER) {
+                Value val = newString("\"number\"");
+                push(vm, val);
+            } else if (a.type == TYPE_STRING) {
+                Value val = newString("\"string\"");
+                push(vm, val);
+            } else {
+                Value val = newString("\"undefined\"");
+                push(vm, val);
             }
 
             break;
