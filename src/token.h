@@ -25,6 +25,7 @@ typedef enum {
     LEFT_BRACE,
     RIGHT_BRACE,
     SEMICOLON,
+    DOT,
     COMMA,
     SINGLE_EQUALS,
     DOUBLE_EQUALS,

@@ -226,6 +226,10 @@ static Token nextToken(Lexer *lexer) {
             advance(lexer);
             return newToken(lexer, BITWISE_XOR);
         }
+        case '.': {
+            advance(lexer);
+            return newToken(lexer, DOT);
+        }
         case ';': {
             advance(lexer);
             return newToken(lexer, SEMICOLON);
@@ -250,10 +254,19 @@ static Token nextToken(Lexer *lexer) {
             advance(lexer);
             return newToken(lexer, MODULO);
         }
+        case '(': {
+            advance(lexer);
+            return newToken(lexer, LEFT_PAREN);
+        }
+        case ')': {
+            advance(lexer);
+            return newToken(lexer, RIGHT_PAREN);
+        }
+        default: {
+            advance(lexer);
+            return compileErrorToken(lexer, "Unexpected character.");
+        }
     }
-
-    advance(lexer);
-    return compileErrorToken(lexer, "Unexpected character.");
 }
 
 static void skipWhitespace(Lexer *lexer) {

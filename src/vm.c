@@ -457,6 +457,9 @@ static VmResult evalOpCode(JankyVm *vm, OpCode op) {
 
             break;
         }
+        case OP_DEFINE_GLOBAL: {
+            
+        }
         default: {
             fprintf(stderr, "Halting VM execution: unknown opcode '%d'\n", op);
             exit(EXIT_FAILURE);
@@ -520,9 +523,7 @@ VmResult run(JankyVm *vm, char *source, int debug) {
         OpCode op = vm->bytecode->code[vm->ip++];
         VmResult result = evalOpCode(vm, op);
         
-        if (result != VM_OK) {
-            return result;
-        }
+        if (result != VM_OK) return result;
     }
 
     freeVm(vm);

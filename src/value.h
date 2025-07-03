@@ -1,6 +1,8 @@
 #ifndef value_h
 #define value_h
 
+#include <stdbool.h>
+
 typedef struct Object Object;
 
 typedef enum {

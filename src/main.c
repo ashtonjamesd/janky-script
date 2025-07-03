@@ -37,7 +37,7 @@ void repl(int debug) {
     char line[1024];
 
     for (;;) {
-        printf("janky-vm> ");
+        printf("janky-vm>  ");
         if (!fgets(line, sizeof(line), stdin)) {
             printf("\n");
             break;

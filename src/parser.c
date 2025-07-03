@@ -94,46 +94,96 @@ static Token currentToken(Parser *parser) {
     return parser->tokens[parser->current];
 }
 
-static void printExpr(AstExpression expr, int indent) {
-    for (int i = 0; i < indent; i++) {
-        printf(" ");
+static AstExpression *compileError(Parser *parser, char *message) {
+    parser->hadError = 1;
+    printf("Error: %s\n", message);
+
+    return NULL;
+}
+
+static bool expectIdentifier(Parser *parser) {
+    if (!expect(parser, IDENTIFIER)) {
+        compileError(parser, "Expected identifier");
+        return false;
     }
 
-    switch (expr.type) {
-        case AST_UNARY: {
-            printf("UNARY: ");
-            printf("%s\n", token_type_to_str(expr.as.unary.op));
-            printExpr(*expr.as.unary.right, indent + 2);
-            break;
-        }
-        case AST_BINARY: {
-            printf("BINARY: \n");
-            printf("LEFT:");
-            printExpr(*expr.as.binary.left, indent + 2);
-            
-            printf("OP: %s\n", token_type_to_str(expr.as.binary.op));
-            
-            printf("RIGHT:");
-            printExpr(*expr.as.binary.right, indent + 2);
-            break;
-        }
-        case AST_CONSTANT: {
-            if (expr.as.constant.type == TYPE_NUMBER) {
-                printf("CONSTANT: %d\n", expr.as.constant.as.number);
-            } else if (expr.as.constant.type == TYPE_BOOL) {
-                printf("CONSTANT: %d\n", expr.as.constant.as.boolean);
-            }
-            break;
-        }
-        case AST_UNKNOWN: {
-            printf("UNKNOWN\n");
-            break;
-        }
-        default: {
-            printf("OOPS bad expression.");
-        }
+    return true;
+}
+
+static void printIndent(int indent) {
+    for (int i = 0; i < indent; ++i) {
+        putchar(' ');
     }
 }
+
+static void printExpr(AstExpression expr, int indent) {
+    switch (expr.type) {
+
+    case AST_CONSTANT:
+        printIndent(indent);
+        switch (expr.as.constant.type) {
+            case TYPE_NUMBER:   printf("NUMBER   : %d\n",  expr.as.constant.as.number);          break;
+            case TYPE_BOOL:     printf("BOOLEAN  : %s\n",  expr.as.constant.as.boolean ? "true":"false"); break;
+            case TYPE_STRING:   printf("STRING   : \"%s\"\n", expr.as.constant.as.object->as.string.chars); break;
+            case TYPE_IDENTIFIER:
+                               printf("IDENT    : %s\n",   expr.as.constant.as.identifier);     break;
+            default:            printf("CONST ?  \n");                                           break;
+        }
+        break;
+
+    case AST_UNARY:
+        printIndent(indent); printf("UNARY     : %s\n", token_type_to_str(expr.as.unary.op));
+        printExpr(*expr.as.unary.right, indent + 2);
+        break;
+
+    case AST_BINARY:
+        printIndent(indent); printf("BINARY    : %s\n", token_type_to_str(expr.as.binary.op));
+        printIndent(indent); printf("LEFT  ->\n");
+        printExpr(*expr.as.binary.left,  indent + 4);
+        printIndent(indent); printf("RIGHT ->\n");
+        printExpr(*expr.as.binary.right, indent + 4);
+        break;
+
+    case AST_PROPERTY:
+        printIndent(indent); printf("PROPERTY  : .%s\n", expr.as.property.property);
+        printIndent(indent); printf("OBJECT ->\n");
+        printExpr(*expr.as.property.object, indent + 4);
+        break;
+
+    case AST_CALL:
+        printIndent(indent); printf("CALL      : (%d arg%s)\n",
+                              expr.as.call.argCount,
+                              expr.as.call.argCount == 1 ? "" : "s");
+        printIndent(indent); printf("CALLEE ->\n");
+        printExpr(*expr.as.call.callee, indent + 4);
+
+        for (int i = 0; i < expr.as.call.argCount; ++i) {
+            printIndent(indent); printf("ARG[%d] ->\n", i);
+            printExpr(*expr.as.call.args[i], indent + 6);
+        }
+        break;
+
+    case AST_VARIABLE_DECLARATION:
+        printIndent(indent);
+        printf("VAR_DECL  : %d %s\n",
+               expr.as.variable.binding,
+               expr.as.variable.identifier);
+        if (expr.as.variable.initializer) {
+            printIndent(indent); printf("INIT ->\n");
+            printExpr(*expr.as.variable.initializer, indent + 4);
+        }
+        break;
+
+    case AST_UNKNOWN:
+        printIndent(indent); printf("UNKNOWN\n");
+        break;
+
+    default:
+        printIndent(indent); printf("<<unhandled expr.type %d>>\n", expr.type);
+        break;
+    }
+}
+
 
 void printAst(Ast *ast) {
     for (int i = 0; i < ast->expr_count; i++) {
@@ -156,13 +206,6 @@ AstExpression *newBinaryExpr(TokenType op, AstExpression *left, AstExpression *r
     expr->as.binary.right = right;
     
     return expr;
-}
-
-static AstExpression *compileError(Parser *parser, char *message) {
-    parser->hadError = 1;
-    printf("Error: %s\n", message);
-
-    return NULL;
 }
 
 static AstExpression *parsePrimary(Parser *parser) {
@@ -213,6 +256,26 @@ static AstExpression *parsePrimary(Parser *parser) {
     }
 }
 
+static AstExpression *parsePostfix(Parser *parser) {
+    AstExpression *expr = parsePrimary(parser);
+
+    for (;;) {
+        if (match(parser, DOT)) {
+            advance(parser);
+
+            Token name = currentToken(parser);
+            if (!expectIdentifier(parser)) return compileError(parser, "Expected property name after '.");
+            
+            AstExpression *prop = newExpr(AST_PROPERTY);
+            prop->as.property.object  = expr;
+            prop->as.property.property = strdup(name.lexeme);
+            expr = prop;
+        }
+    }
+
+    return expr;
+}
+
 static AstExpression *parseUnary(Parser *parser) {
     while (match(parser, MINUS) || match(parser, LOGICAL_NOT) || match(parser, BITWISE_NOT) || match(parser, TYPEOF)) {
         TokenType op = currentToken(parser).type;
@@ -227,7 +290,7 @@ static AstExpression *parseUnary(Parser *parser) {
         return expr;
     }
 
-    return parsePrimary(parser);
+    return parsePostfix(parser);
 }
 
 static AstExpression *parseFactor(Parser *parser) {
@@ -383,15 +446,6 @@ static bool expectSemicolon(Parser *parser) {
 
 static inline AstExpression *noExpr() {
     return NULL;
-}
-
-static bool expectIdentifier(Parser *parser) {
-    if (!expect(parser, IDENTIFIER)) {
-        compileError(parser, "Expected identifier");
-        return false;
-    }
-
-    return true;
 }
 
 static AstExpression *parseVariableDeclaration(Parser *parser) {

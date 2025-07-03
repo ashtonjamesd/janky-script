@@ -11,6 +11,8 @@ typedef enum {
     AST_UNARY,
     AST_BINARY,
     AST_VARIABLE_DECLARATION,
+    AST_PROPERTY,
+    AST_CALL,
     
     AST_UNKNOWN,
 } AstType;
@@ -39,10 +41,21 @@ typedef enum {
 } VariableBinding;
 
 typedef struct {
+    AstExpression *object;
+    char          *property;
+} AstProperty;
+
+typedef struct {
     char *identifier;
     VariableBinding binding;
     AstExpression *initializer;
 } VariableDeclaration;
+
+typedef struct {
+    AstExpression **args;
+    int             argCount;
+    AstExpression  *callee;
+} AstCall;
 
 typedef struct {
     TokenType      op;
@@ -64,6 +77,8 @@ struct AstExpression {
         ConstantExpression  constant;
         UnknownExpression   unknown;
         VariableDeclaration variable;
+        AstCall             call;
+        AstProperty         property;
     } as;
 };
 

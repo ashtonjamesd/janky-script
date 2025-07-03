@@ -5,8 +5,8 @@
 
 void initSymbolTable(SymbolTable *table) {
     table->count = 0;
-  table->capacity = 0;
-  table->symbols = NULL;
+    table->capacity = 0;
+    table->symbols = NULL;
 }
 
 static uint32_t hashString(const char* key, int length) {

@@ -43,6 +43,11 @@ typedef enum {
     OP_TRIPLE_EQUALS,
     OP_TRIPLE_NOT_EQUALS,
 
+    OP_DEFINE_GLOBAL,
+    OP_GET_GLOBAL,
+
+    OP_PRINT,
+
     OP_END,
 } OpCode;
 
